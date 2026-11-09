@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E9EEF1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#10181F" media="(prefers-color-scheme: dark)">
+<title>Vélo’v e-bikes nearby</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#E9EEF1; --surface:#FFFFFF; --ink:#14222E; --muted:#5A6976; --line:#CDD6DD;
+  --charge:#F5C518; --charge-ink:#14222E; --off:#9AA7B1; --warn:#B3261E;
+  --cond:"Barlow Condensed","Roboto Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root{color-scheme:dark;
+    --bg:#10181F; --surface:#18232C; --ink:#E8EEF2; --muted:#93A2AE; --line:#2A3945;
+    --off:#5C6B77; --warn:#FF8A80;}
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:400 1rem/1.45 var(--body);-webkit-font-smoothing:antialiased}
+main{max-width:34rem;margin:0 auto;padding:1rem 1.1rem 2rem}
+
+header{display:flex;align-items:center;justify-content:space-between;gap:1rem;color:var(--muted);font-size:.9rem}
+.tick{display:flex;align-items:center;gap:.45rem}
+.ring{width:18px;height:18px;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:3}
+.ring .track{stroke:var(--line)}
+.ring .sweep{stroke:var(--ink);stroke-dasharray:44;stroke-dashoffset:44}
+.ring.run .sweep{animation:sweep var(--poll) linear forwards}
+@keyframes sweep{from{stroke-dashoffset:44}to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){.ring.run .sweep{animation:none;stroke-dashoffset:0}}
+
+/* The hero: the nearest charged bike, drawn as a battery */
+#hero{margin:1.4rem 0 1.6rem}
+.battery{position:relative;display:inline-flex;align-items:baseline;gap:.6rem;
+  background:var(--charge);color:var(--charge-ink);border-radius:14px;
+  padding:.1rem 1.1rem .25rem;margin-right:14px}
+.battery::after{content:"";position:absolute;right:-12px;top:30%;height:40%;width:8px;
+  background:var(--charge);border-radius:0 5px 5px 0}
+.battery.empty{background:transparent;color:var(--off);box-shadow:inset 0 0 0 3px var(--off)}
+.battery.empty::after{background:var(--off)}
+.big{font:700 6.5rem/1 var(--cond);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.unit{font:600 1.5rem/1 var(--cond)}
+#hero h1{font:600 2rem/1.1 var(--cond);margin:.8rem 0 .2rem}
+#hero p{margin:0;color:var(--muted)}
+#hero a{color:inherit}
+.flash .battery{animation:flash .9s ease-out 2}
+@keyframes flash{50%{transform:scale(1.06)}}
+@media (prefers-reduced-motion:reduce){.flash .battery{animation:none}}
+
+.radius{display:flex;gap:.4rem;margin:0 0 1rem;flex-wrap:wrap;align-items:center}
+.radius span{color:var(--muted);font-size:.9rem;margin-right:.2rem}
+.radius button{font:500 .95rem var(--body);color:var(--ink);background:transparent;
+  border:1.5px solid var(--line);border-radius:999px;padding:.3rem .8rem;cursor:pointer}
+.radius button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button:focus-visible,a:focus-visible{outline:3px solid var(--charge);outline-offset:2px}
+
+ol{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+li a{display:grid;grid-template-columns:3.6rem 1fr auto;gap:.9rem;align-items:center;
+  padding:.75rem 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none}
+.pill{font:700 1.6rem/1 var(--cond);text-align:center;padding:.3rem 0;border-radius:8px;
+  background:var(--charge);color:var(--charge-ink);font-variant-numeric:tabular-nums}
+.pill.zero{background:transparent;color:var(--off);box-shadow:inset 0 0 0 2px var(--line)}
+.name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub,.side{color:var(--muted);font-size:.88rem}
+.side{text-align:right}
+li.closed{opacity:.5}
+
+#msg{margin:1rem 0;color:var(--warn)}
+#msg:empty{display:none}
+footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <span id="place">Finding your location…</span>
+    <span class="tick" title="Next refresh">
+      <svg class="ring" viewBox="0 0 18 18" aria-hidden="true"><circle class="track" cx="9" cy="9" r="7"/><circle class="sweep" cx="9" cy="9" r="7"/></svg>
+      <span id="age">–</span>
+    </span>
+  </header>
+
+  <section id="hero" aria-live="polite">
+    <span class="battery empty"><span class="big">–</span></span>
+    <h1>Looking for e-bikes</h1>
+    <p>Allow location so stations can be sorted by distance.</p>
+  </section>
+
+  <div class="radius" role="group" aria-label="Search radius">
+    <span>Within</span>
+  </div>
+
+  <ol id="list"></ol>
+  <p id="msg" role="alert"></p>
+  <footer>Live data from Métropole de Lyon and JCDecaux (Licence Ouverte). Refreshes only while this page is open.</footer>
+</main>
+
+<script>
+(() => {
+  const q = new URLSearchParams(location.search);
+  const GBFS = q.get("gbfs") || "https://download.data.grandlyon.com/files/rdata/jcd_jcdecaux.jcdvelov/gbfs.json";
+  const PROXY = q.get("proxy");                       // e.g. "/velov/" to rewrite the feed origin through your own server
+  const POLL_MS = Math.max(10, +q.get("every") || 20) * 1000;
+  const RADII = [300, 500, 800, 1200];
+  const $ = id => document.getElementById(id);
+  document.documentElement.style.setProperty("--poll", POLL_MS + "ms");
+
+  const store = {
+    get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v){ try { localStorage.setItem(k, v); } catch {} }
+  };
+  let radius = RADII.includes(+store.get("radius")) ? +store.get("radius") : 500;
+
+  let pos = null, info = null, statusUrl = null, electric = new Set();
+  let stations = null, fetchedAt = 0, timer = null, watchId = null, hadEbike = null, busy = false;
+
+  const via = url => PROXY ? url.replace(/^https?:\/\/[^/]+\//, PROXY) : url;
+  async function data(url){
+    const r = await fetch(via(url), { cache: "no-store" });
+    if (!r.ok) throw new Error(`The feed answered HTTP ${r.status}.`);
+    return (await r.json()).data;
+  }
+
+  async function discover(){
+    const d = await data(GBFS);
+    const list = d.feeds || Object.values(d)[0].feeds;      // GBFS v3 : v2
+    const f = Object.fromEntries(list.map(x => [x.name, x.url]));
+    statusUrl = f.station_status;
+    const [si, vt] = await Promise.all([
+      data(f.station_information),
+      f.vehicle_types ? data(f.vehicle_types).catch(() => null) : null
+    ]);
+    info = new Map(si.stations.map(s => [s.station_id, s]));
+    if (vt) electric = new Set(vt.vehicle_types
+      .filter(t => (t.propulsion_type || "human") !== "human").map(t => t.vehicle_type_id));
+  }
+
+  async function poll(){
+    if (document.hidden || busy) return;
+    busy = true; restartRing();
+    try {
+      if (!info) await discover();
+      stations = (await data(statusUrl)).stations;
+      fetchedAt = Date.now();
+      $("msg").textContent = "";
+      render();
+    } catch (e) {
+      $("msg").textContent = e instanceof TypeError
+        ? "Couldn’t reach the Vélo’v feed. Check your connection; if it persists, the browser is blocking the cross-origin request, so serve this page with ?proxy=/velov/ (see setup notes)."
+        : e.message;
+    } finally { busy = false; }
+  }
+
+  const ebikes = s => "num_ebikes_available" in s ? s.num_ebikes_available
+    : (s.vehicle_types_available || []).reduce((n, v) => n + (electric.has(v.vehicle_type_id) ? v.count : 0), 0);
+  const nameOf = i => typeof i.name === "string" ? i.name : (i.name?.[0]?.text ?? i.station_id);
+  function dist(a, b, c, d){
+    const r = Math.PI / 180, p1 = a * r, p2 = c * r;
+    const h = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin((d - b) * r / 2) ** 2;
+    return 2 * 6371000 * Math.asin(Math.sqrt(h));
+  }
+  const metres = d => d < 1000 ? `${Math.round(d / 10) * 10} m` : `${(d / 1000).toFixed(1)} km`;
+  const walk = d => `${Math.max(1, Math.round(d / 80))} min walk`;
+  const directions = r => `https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lon}&travelmode=walking`;
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+
+  function render(){
+    if (!stations || !info || !pos) return;
+    const rows = stations.map(s => {
+      const i = info.get(s.station_id);
+      if (!i) return null;
+      const e = ebikes(s);
+      return { name: nameOf(i), lat: i.lat, lon: i.lon, e,
+        classic: Math.max(0, (s.num_bikes_available ?? 0) - e),
+        open: s.is_renting !== false && s.is_renting !== 0,
+        d: dist(pos.lat, pos.lon, i.lat, i.lon) };
+    }).filter(r => r && r.d <= radius).sort((a, b) => a.d - b.d);
+
+    const best = rows.find(r => r.open && r.e > 0);
+    const hero = $("hero");
+    hero.replaceChildren();
+    const batt = el("span", best ? "battery" : "battery empty");
+    batt.append(el("span", "big", best ? best.e : 0), el("span", "unit", (best?.e ?? 0) === 1 ? "e-bike" : "e-bikes"));
+    hero.append(batt);
+    if (best) {
+      const h = el("h1"); const a = el("a", null, best.name); a.href = directions(best); h.append(a);
+      hero.append(h, el("p", null, `${metres(best.d)}, ${walk(best.d)}`));
+    } else {
+      hero.append(el("h1", null, `None within ${metres(radius)}`),
+        el("p", null, rows.length ? "Widen the radius, or keep this page open: it checks again shortly." : "No stations in range. Widen the radius."));
+    }
+    if (hadEbike === false && best) {
+      hero.classList.remove("flash"); void hero.offsetWidth; hero.classList.add("flash");
+      navigator.vibrate?.([120, 80, 120]);
+    }
+    hadEbike = !!best;
+
+    $("list").replaceChildren(...rows.map(r => {
+      const li = el("li", r.open ? null : "closed"), a = el("a");
+      a.href = directions(r); a.target = "_blank"; a.rel = "noopener";
+      const mid = el("div");
+      mid.append(el("div", "name", r.name), el("div", "sub", r.open ? `${metres(r.d)}, ${walk(r.d)}` : `${metres(r.d)}, station closed`));
+      a.append(el("span", r.e ? "pill" : "pill zero", r.e), mid, el("span", "side", `${r.classic} classic`));
+      li.append(a); return li;
+    }));
+  }
+
+  function restartRing(){
+    const ring = document.querySelector(".ring");
+    ring.classList.remove("run"); void ring.getBoundingClientRect(); ring.classList.add("run");
+  }
+  setInterval(() => {
+    if (fetchedAt) $("age").textContent = `${Math.round((Date.now() - fetchedAt) / 1000)} s ago`;
+  }, 1000);
+
+  function locate(){
+    if (!("geolocation" in navigator)) { $("place").textContent = "Location not supported"; return; }
+    watchId = navigator.geolocation.watchPosition(
+      p => { pos = { lat: p.coords.latitude, lon: p.coords.longitude };
+             $("place").textContent = `Your location, ±${Math.round(p.coords.accuracy)} m`; render(); },
+      e => { $("place").textContent = "Location unavailable";
+             $("msg").textContent = e.code === 1
+               ? "Location access is blocked. Allow it for this site in your browser settings, then reload."
+               : `Couldn’t get your location: ${e.message}`; },
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 });
+  }
+
+  function start(){
+    if (timer) return;
+    locate(); poll(); timer = setInterval(poll, POLL_MS);
+  }
+  function stop(){
+    clearInterval(timer); timer = null;
+    if (watchId != null) navigator.geolocation.clearWatch(watchId), watchId = null;
+  }
+  document.addEventListener("visibilitychange", () => document.hidden ? stop() : start());
+
+  const group = document.querySelector(".radius");
+  for (const r of RADII) {
+    const b = el("button", null, metres(r));
+    b.type = "button"; b.setAttribute("aria-pressed", r === radius);
+    b.onclick = () => {
+      radius = r; store.set("radius", r);
+      group.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+      hadEbike = null; render();
+    };
+    group.append(b);
+  }
+
+  if (!document.hidden) start();
+})();
+</script>
+</body>
+</html>
