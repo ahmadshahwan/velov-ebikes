@@ -7,7 +7,8 @@ Live at https://ahmad.shahwan.pw/velov-ebikes/ via GitHub Pages
 
 ## How it works
 - Reads the Grand Lyon GBFS feed: gbfs.json → station_information (fetched
-  once) + station_status (polled every 20 s, `?every=` overrides).
+  once) + station_status (polled every 5/10/20 s, picked from the "Every"
+  menu and saved; default 20 s; `?every=` overrides, minimum 5 s).
 - The header shows data freshness from station_status `last_updated`
   ("data from 45 s ago"), not time since fetch; it falls back to fetch time
   ("fetched …") if the feed omits it. Tapping it refetches and restarts the
@@ -23,7 +24,7 @@ Live at https://ahmad.shahwan.pw/velov-ebikes/ via GitHub Pages
   layout shift on toggle); the nearest open station with an e-bike is
   emphasised in each, and pulses + vibrates when one appears after none. The map is hand-rolled, not a library: a
   Web Mercator view centred on the user, scaled so the selected radius fits
-  (the radius buttons act as zoom). Station markers render immediately;
+  (the radius picker acts as zoom). Station markers render immediately;
   OpenStreetMap raster tiles (no API key; muted via CSS filter, inverted in
   dark mode) load in the background and fade in, and rendering never waits
   for them. Keep the OSM attribution visible. Tapping a marker opens a detail card.
@@ -32,4 +33,6 @@ Live at https://ahmad.shahwan.pw/velov-ebikes/ via GitHub Pages
 - Keep it one self-contained file, vanilla JS, minimal dependencies.
 - Build DOM with textContent (station names are external data).
 - Light/dark via CSS variables on :root; mobile-first.
+- Radius and refresh interval are compact drop-down pickers ("Within 500 m ▾",
+  "Every 20 s ▾") overlaying the content briefly; keep the controls to one row.
 - Test against a mock GBFS feed before pushing.

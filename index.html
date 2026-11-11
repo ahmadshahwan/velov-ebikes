@@ -47,12 +47,25 @@ header{display:flex;align-items:center;justify-content:space-between;gap:1rem;co
 @keyframes flash{50%{scale:1.12}}
 @media (prefers-reduced-motion:reduce){.flash{animation:none}}
 
-.controls{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between;margin:1.2rem 0 1rem}
-.radius,.layout{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
-.radius span{color:var(--muted);font-size:.9rem;margin-right:.2rem}
-.controls button{font:500 .95rem var(--body);color:var(--ink);background:transparent;
-  border:1.5px solid var(--line);border-radius:999px;padding:.3rem .8rem;cursor:pointer}
-.controls button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.controls{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin:1.2rem 0 1rem}
+.layout{display:flex;gap:.35rem;margin-left:auto}
+.chip{font:500 .95rem var(--body);color:var(--ink);background:transparent;white-space:nowrap;
+  border:1.5px solid var(--line);border-radius:999px;padding:.3rem .65rem;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+@media (max-width:379px){.chip{font-size:.88rem;padding:.3rem .5rem}.controls,.layout{gap:.3rem}}
+
+/* Compact pickers (radius, refresh interval): a chip that drops down a short menu over the content. */
+.pick{position:relative}
+.pick .k{color:var(--muted);font-weight:400}
+.pick .caret{margin-left:.25rem;font-size:.7em;color:var(--muted)}
+.pick-btn[aria-expanded="true"]{border-color:var(--ink)}
+.menu{position:absolute;top:calc(100% + .35rem);left:0;z-index:10;min-width:100%;display:flex;flex-direction:column;
+  padding:.3rem;background:var(--surface);border-radius:12px;box-shadow:0 0 0 1px var(--line),0 8px 24px rgba(0,0,0,.25)}
+.menu[hidden]{display:none}
+.menu button{font:500 1rem var(--body);color:var(--ink);background:none;border:0;border-radius:8px;
+  padding:.55rem .9rem;text-align:left;white-space:nowrap;cursor:pointer}
+.menu button:hover{background:var(--bg)}
+.menu button[aria-checked="true"]{background:var(--ink);color:var(--bg)}
 button:focus-visible,a:focus-visible{outline:3px solid var(--charge);outline-offset:2px}
 
 ol{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
@@ -122,12 +135,11 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
   </header>
 
   <div class="controls">
-    <div class="radius" role="group" aria-label="Search radius">
-      <span>Within</span>
-    </div>
+    <div class="pick" id="radiusPick"></div>
+    <div class="pick" id="everyPick"></div>
     <div class="layout" role="group" aria-label="Layout">
-      <button type="button" data-layout="map">Map</button>
-      <button type="button" data-layout="list">List</button>
+      <button type="button" class="chip" data-layout="map">Map</button>
+      <button type="button" class="chip" data-layout="list">List</button>
     </div>
   </div>
 
@@ -152,15 +164,16 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
   const q = new URLSearchParams(location.search);
   const GBFS = q.get("gbfs") || "https://download.data.grandlyon.com/files/rdata/jcd_jcdecaux.jcdvelov/gbfs.json";
   const PROXY = q.get("proxy");                       // e.g. "/velov/" to rewrite the feed origin through your own server
-  const POLL_MS = Math.max(10, +q.get("every") || 20) * 1000;
-  const RADII = [300, 500, 800, 1200];
-  const $ = id => document.getElementById(id);
-  document.documentElement.style.setProperty("--poll", POLL_MS + "ms");
-
+  const RADII = [300, 500, 800, 1200], EVERY = [5, 10, 20];
   const store = {
     get(k){ try { return localStorage.getItem(k); } catch { return null; } },
     set(k, v){ try { localStorage.setItem(k, v); } catch {} }
   };
+  // Refresh interval in seconds: ?every= wins, then the saved choice, then 20 s. Never below 5 s.
+  let every = Math.max(5, +q.get("every") || (EVERY.includes(+store.get("every")) ? +store.get("every") : 20));
+  const $ = id => document.getElementById(id);
+  const setRingDuration = () => document.documentElement.style.setProperty("--poll", every * 1000 + "ms");
+  setRingDuration();
   let radius = RADII.includes(+store.get("radius")) ? +store.get("radius") : 500;
   let layout = store.get("layout") === "list" ? "list" : "map";
   let selected = null;                                   // station_id whose card is open on the map
@@ -366,31 +379,70 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
 
   function start(){
     if (timer) return;
-    locate(); poll(); timer = setInterval(poll, POLL_MS);
+    locate(); poll(); timer = setInterval(poll, every * 1000);
   }
   function stop(){
     clearInterval(timer); timer = null;
     if (watchId != null) navigator.geolocation.clearWatch(watchId), watchId = null;
   }
   // Manual refresh: fetch now and restart the countdown from zero.
-  $("refresh").onclick = () => {
-    if (!timer || busy) return;
-    clearInterval(timer); timer = setInterval(poll, POLL_MS);
+  // Fetch now and restart the countdown from zero.
+  function refreshNow(){
+    if (!timer) return;
+    clearInterval(timer); timer = setInterval(poll, every * 1000);
     poll();
-  };
+  }
+  $("refresh").onclick = () => { if (!busy) refreshNow(); };
   document.addEventListener("visibilitychange", () => document.hidden ? stop() : start());
 
-  const group = document.querySelector(".radius");
-  for (const r of RADII) {
-    const b = el("button", null, metres(r));
-    b.type = "button"; b.setAttribute("aria-pressed", r === radius);
-    b.onclick = () => {
-      radius = r; store.set("radius", r);
-      group.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
-      hadEbike = null; render();
+  // A chip showing "<prefix> <value> ▾" that drops down a menu of values; closes on pick, outside tap or Escape.
+  const closers = [];
+  const closeMenus = except => closers.forEach(c => c !== except && c());
+  function picker(host, prefix, values, fmt, get, set){
+    const btn = el("button", "chip pick-btn"), menu = el("div", "menu");
+    btn.type = "button"; btn.setAttribute("aria-haspopup", "menu"); btn.setAttribute("aria-expanded", "false");
+    menu.setAttribute("role", "menu"); menu.setAttribute("aria-label", prefix); menu.hidden = true;
+    const items = values.map(v => {
+      const b = el("button", null, fmt(v));
+      b.type = "button"; b.setAttribute("role", "menuitemradio");
+      b.onclick = () => { close(true); set(v); sync(); };
+      return { v, b };
+    });
+    const sync = () => {
+      btn.replaceChildren(el("span", "k", prefix + " "), el("span", null, fmt(get())), el("span", "caret", "▾"));
+      items.forEach(({ v, b }) => b.setAttribute("aria-checked", v === get()));
     };
-    group.append(b);
+    const close = refocus => {
+      if (menu.hidden) return;
+      menu.hidden = true; btn.setAttribute("aria-expanded", "false");
+      if (refocus) btn.focus();
+    };
+    btn.onclick = () => {
+      if (!menu.hidden) return close();
+      closeMenus(close);
+      menu.hidden = false; btn.setAttribute("aria-expanded", "true");
+      (items.find(i => i.v === get()) || items[0]).b.focus();
+    };
+    menu.onkeydown = ev => {
+      const i = items.findIndex(x => x.b === document.activeElement), n = items.length;
+      if (ev.key === "Escape") close(true);
+      else if (ev.key === "ArrowDown") items[(i + 1) % n].b.focus();
+      else if (ev.key === "ArrowUp") items[(i - 1 + n) % n].b.focus();
+      else return;
+      ev.preventDefault();
+    };
+    menu.append(...items.map(i => i.b));
+    host.append(btn, menu);
+    closers.push(close); sync();
   }
+  document.addEventListener("click", ev => { if (!ev.target.closest(".pick")) closeMenus(); });
+
+  picker($("radiusPick"), "Within", RADII, metres, () => radius, r => {
+    radius = r; store.set("radius", r); hadEbike = null; render();
+  });
+  picker($("everyPick"), "Every", EVERY, v => `${v} s`, () => every, v => {
+    every = v; store.set("every", v); setRingDuration(); refreshNow();
+  });
 
   const main = document.querySelector("main"), layoutButtons = document.querySelectorAll(".layout button");
   function setLayout(l){
