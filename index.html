@@ -164,22 +164,24 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
   const q = new URLSearchParams(location.search);
   const GBFS = q.get("gbfs") || "https://download.data.grandlyon.com/files/rdata/jcd_jcdecaux.jcdvelov/gbfs.json";
   const PROXY = q.get("proxy");                       // e.g. "/velov/" to rewrite the feed origin through your own server
-  const RADII = [300, 500, 800, 1200], EVERY = [5, 10, 20];
+  const RADII = [300, 500, 800, 1200], EVERY = [5, 10, 20, "sync"];
   const store = {
     get(k){ try { return localStorage.getItem(k); } catch { return null; } },
     set(k, v){ try { localStorage.setItem(k, v); } catch {} }
   };
-  // Refresh interval in seconds: ?every= wins, then the saved choice, then 20 s. Never below 5 s.
-  let every = Math.max(5, +q.get("every") || (EVERY.includes(+store.get("every")) ? +store.get("every") : 20));
+  // Refresh interval: seconds, or "sync" = fetch right after the feed's next expected update.
+  // ?every= wins, then the saved choice, then 20 s. Never below 5 s.
+  const asEvery = v => v === "sync" ? v : +v > 0 ? Math.max(5, +v) : null;
+  const savedEvery = asEvery(store.get("every"));
+  let every = asEvery(q.get("every")) ?? (EVERY.includes(savedEvery) ? savedEvery : 20);
   const $ = id => document.getElementById(id);
-  const setRingDuration = () => document.documentElement.style.setProperty("--poll", every * 1000 + "ms");
-  setRingDuration();
   let radius = RADII.includes(+store.get("radius")) ? +store.get("radius") : 500;
   let layout = store.get("layout") === "list" ? "list" : "map";
   let selected = null;                                   // station_id whose card is open on the map
 
   let pos = null, info = null, statusUrl = null, electric = new Set();
-  let stations = null, fetchedAt = 0, dataAt = 0, timer = null, watchId = null, hadEbike = null, busy = false;
+  let stations = null, fetchedAt = 0, dataAt = 0, ttl = 0, staleTries = 0, syncMargin = 2000;
+  let running = false, timer = null, watchId = null, hadEbike = null, busy = false;
 
   const via = url => PROXY ? url.replace(/^https?:\/\/[^/]+\//, PROXY) : url;
   async function feed(url){
@@ -205,13 +207,21 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
 
   async function poll(){
     if (document.hidden || busy) return;
-    busy = true; restartRing();
+    busy = true;
     try {
       if (!info) await discover();
       const st = await feed(statusUrl), lu = st.last_updated;     // GBFS v2: POSIX seconds; v3: RFC 3339
       stations = st.data.stations;
       fetchedAt = Date.now();
+      const prev = dataAt;
       dataAt = (typeof lu === "number" ? lu * 1000 : Date.parse(lu)) || 0;
+      ttl = +st.ttl || 0;
+      const wasStale = staleTries;
+      staleTries = dataAt && dataAt === prev ? staleTries + 1 : 0;
+      // Learn the feed's publication lag (and any clock skew): an on-time sync fetch that finds old
+      // data widens the margin by 2 s; on-time hits shrink it slowly back toward 2 s.
+      if (every === "sync") syncMargin = staleTries === 1 ? Math.min(syncMargin + 2000, 20000)
+        : !staleTries && !wasStale ? Math.max(2000, syncMargin - 250) : syncMargin;
       showAge();
       $("msg").textContent = "";
       render();
@@ -353,7 +363,9 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
   $("map").onclick = () => { if (selected) { selected = null; render(); } };
   new ResizeObserver(() => { if (layout === "map") render(); }).observe($("map"));
 
-  function restartRing(){
+  // The ring sweeps over exactly the wait until the next fetch.
+  function restartRing(ms){
+    document.documentElement.style.setProperty("--poll", ms + "ms");
     const ring = document.querySelector(".ring");
     ring.classList.remove("run"); void ring.getBoundingClientRect(); ring.classList.add("run");
   }
@@ -377,33 +389,50 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 });
   }
 
+  // How long to wait before the next fetch.
+  // "sync": the feed publishes every ttl seconds (60 s if it doesn't say), so aim just after
+  // last_updated + period + margin. If a fetch still returns the old data (publication lag,
+  // clock skew), retry after 5, 10, 15, 20 s. Without last_updated, fall back to 20 s.
+  function nextDelay(){
+    if (every !== "sync") return every * 1000;
+    if (!dataAt) return 20000;
+    if (staleTries) return Math.min(5000 * staleTries, 20000);
+    const period = (ttl >= 15 && ttl <= 300 ? ttl : 60) * 1000;
+    return Math.min(period + syncMargin, Math.max(3000, dataAt + period + syncMargin - Date.now()));
+  }
+  function schedule(){
+    clearTimeout(timer);
+    const ms = nextDelay();
+    timer = setTimeout(tick, ms); restartRing(ms);
+  }
+  async function tick(){
+    clearTimeout(timer);
+    await poll();
+    if (running) schedule();
+  }
+
   function start(){
-    if (timer) return;
-    locate(); poll(); timer = setInterval(poll, every * 1000);
+    if (running) return;
+    running = true; locate(); tick();
   }
   function stop(){
-    clearInterval(timer); timer = null;
+    running = false; clearTimeout(timer); timer = null;
     if (watchId != null) navigator.geolocation.clearWatch(watchId), watchId = null;
   }
-  // Manual refresh: fetch now and restart the countdown from zero.
-  // Fetch now and restart the countdown from zero.
-  function refreshNow(){
-    if (!timer) return;
-    clearInterval(timer); timer = setInterval(poll, every * 1000);
-    poll();
-  }
-  $("refresh").onclick = () => { if (!busy) refreshNow(); };
+  // Fetch now; the countdown restarts from the fetch.
+  const refreshNow = () => { if (running && !busy) tick(); };
+  $("refresh").onclick = refreshNow;
   document.addEventListener("visibilitychange", () => document.hidden ? stop() : start());
 
   // A chip showing "<prefix> <value> ▾" that drops down a menu of values; closes on pick, outside tap or Escape.
   const closers = [];
   const closeMenus = except => closers.forEach(c => c !== except && c());
-  function picker(host, prefix, values, fmt, get, set){
+  function picker(host, prefix, values, fmt, get, set, menuFmt = fmt){
     const btn = el("button", "chip pick-btn"), menu = el("div", "menu");
     btn.type = "button"; btn.setAttribute("aria-haspopup", "menu"); btn.setAttribute("aria-expanded", "false");
     menu.setAttribute("role", "menu"); menu.setAttribute("aria-label", prefix); menu.hidden = true;
     const items = values.map(v => {
-      const b = el("button", null, fmt(v));
+      const b = el("button", null, menuFmt(v));
       b.type = "button"; b.setAttribute("role", "menuitemradio");
       b.onclick = () => { close(true); set(v); sync(); };
       return { v, b };
@@ -440,9 +469,10 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
   picker($("radiusPick"), "Within", RADII, metres, () => radius, r => {
     radius = r; store.set("radius", r); hadEbike = null; render();
   });
-  picker($("everyPick"), "Every", EVERY, v => `${v} s`, () => every, v => {
-    every = v; store.set("every", v); setRingDuration(); refreshNow();
-  });
+  picker($("everyPick"), "Every", EVERY, v => v === "sync" ? "update" : `${v} s`, () => every, v => {
+    every = v; store.set("every", v);
+    if (running) busy ? schedule() : tick();
+  }, v => v === "sync" ? "Feed update" : `${v} s`);
 
   const main = document.querySelector("main"), layoutButtons = document.querySelectorAll(".layout button");
   function setLayout(l){
