@@ -170,10 +170,10 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     set(k, v){ try { localStorage.setItem(k, v); } catch {} }
   };
   // Refresh interval: seconds, or "sync" = fetch right after the feed's next expected update.
-  // ?every= wins, then the saved choice, then 20 s. Never below 5 s.
+  // ?every= wins, then the saved choice, then "sync". Never below 5 s.
   const asEvery = v => v === "sync" ? v : +v > 0 ? Math.max(5, +v) : null;
   const savedEvery = asEvery(store.get("every"));
-  let every = asEvery(q.get("every")) ?? (EVERY.includes(savedEvery) ? savedEvery : 20);
+  let every = asEvery(q.get("every")) ?? (EVERY.includes(savedEvery) ? savedEvery : "sync");
   const $ = id => document.getElementById(id);
   let radius = RADII.includes(+store.get("radius")) ? +store.get("radius") : 500;
   let layout = store.get("layout") === "list" ? "list" : "map";

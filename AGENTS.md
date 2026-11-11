@@ -8,7 +8,7 @@ Live at https://ahmad.shahwan.pw/velov-ebikes/ via GitHub Pages
 ## How it works
 - Reads the Grand Lyon GBFS feed: gbfs.json → station_information (fetched
   once) + station_status, fetched every 5/10/20 s or "update" (sync),
-  picked from the "Every" menu and saved; default 20 s; `?every=` overrides
+  picked from the "Every" menu and saved; default "update" (sync); `?every=` overrides
   (seconds, minimum 5, or `sync`). Sync schedules each fetch at
   last_updated + ttl (60 s if absent) + a margin, retrying after
   5/10/15/20 s while the data is still old. The margin starts at 2 s and
