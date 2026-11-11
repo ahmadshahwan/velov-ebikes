@@ -30,7 +30,8 @@ body{background:var(--bg);color:var(--ink);font:400 1rem/1.45 var(--body);-webki
 main{max-width:34rem;margin:0 auto;padding:1rem 1.1rem 2rem}
 
 header{display:flex;align-items:center;justify-content:space-between;gap:1rem;color:var(--muted);font-size:.9rem}
-.tick{display:flex;align-items:center;gap:.45rem;font:inherit;color:inherit;background:none;
+#place{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tick{display:flex;flex:none;white-space:nowrap;align-items:center;gap:.45rem;font:inherit;color:inherit;background:none;
   border:0;border-radius:999px;padding:.3rem .5rem;margin:-.3rem -.5rem;cursor:pointer}
 .tick:hover{color:var(--ink)}
 .ring{width:18px;height:18px;transform:rotate(-90deg)}
@@ -165,14 +166,15 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
   let selected = null;                                   // station_id whose card is open on the map
 
   let pos = null, info = null, statusUrl = null, electric = new Set();
-  let stations = null, fetchedAt = 0, timer = null, watchId = null, hadEbike = null, busy = false;
+  let stations = null, fetchedAt = 0, dataAt = 0, timer = null, watchId = null, hadEbike = null, busy = false;
 
   const via = url => PROXY ? url.replace(/^https?:\/\/[^/]+\//, PROXY) : url;
-  async function data(url){
+  async function feed(url){
     const r = await fetch(via(url), { cache: "no-store" });
     if (!r.ok) throw new Error(`The feed answered HTTP ${r.status}.`);
-    return (await r.json()).data;
+    return r.json();
   }
+  const data = async url => (await feed(url)).data;
 
   async function discover(){
     const d = await data(GBFS);
@@ -193,8 +195,11 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     busy = true; restartRing();
     try {
       if (!info) await discover();
-      stations = (await data(statusUrl)).stations;
-      fetchedAt = Date.now(); showAge();
+      const st = await feed(statusUrl), lu = st.last_updated;     // GBFS v2: POSIX seconds; v3: RFC 3339
+      stations = st.data.stations;
+      fetchedAt = Date.now();
+      dataAt = (typeof lu === "number" ? lu * 1000 : Date.parse(lu)) || 0;
+      showAge();
       $("msg").textContent = "";
       render();
     } catch (e) {
@@ -339,7 +344,12 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     const ring = document.querySelector(".ring");
     ring.classList.remove("run"); void ring.getBoundingClientRect(); ring.classList.add("run");
   }
-  const showAge = () => { if (fetchedAt) $("age").textContent = `${Math.round((Date.now() - fetchedAt) / 1000)} s ago`; };
+  // How old the data is, per the feed's own last_updated; falls back to fetch time if the feed omits it.
+  function showAge(){
+    if (!fetchedAt) return;
+    const s = Math.max(0, Math.round((Date.now() - (dataAt || fetchedAt)) / 1000));
+    $("age").textContent = `${dataAt ? "data from" : "fetched"} ${s < 120 ? `${s} s` : `${Math.round(s / 60)} min`} ago`;
+  }
   setInterval(showAge, 1000);
 
   function locate(){

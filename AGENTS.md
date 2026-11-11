@@ -8,6 +8,10 @@ Live at https://ahmad.shahwan.pw/velov-ebikes/ via GitHub Pages
 ## How it works
 - Reads the Grand Lyon GBFS feed: gbfs.json → station_information (fetched
   once) + station_status (polled every 20 s, `?every=` overrides).
+- The header shows data freshness from station_status `last_updated`
+  ("data from 45 s ago"), not time since fetch; it falls back to fetch time
+  ("fetched …") if the feed omits it. Tapping it refetches and restarts the
+  countdown.
 - Polling and GPS (watchPosition) run only while the page is visible;
   both stop on visibilitychange.
 - E-bike count: `num_ebikes_available` if present, else sums
