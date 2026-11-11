@@ -82,12 +82,14 @@ li.closed{opacity:.5}
 [data-layout="map"] #hero,[data-layout="map"] #list,[data-layout="list"] #map{display:none}
 
 /* Map layout: hand-rolled Web Mercator view centred on the user, scaled to the radius.
-   Markers draw immediately; street tiles fade in underneath whenever they arrive. */
+   Markers draw immediately; OpenStreetMap tiles fade in underneath whenever they arrive. */
 #map{position:relative;height:min(70svh,40rem);min-height:18rem;border-radius:14px;overflow:hidden;
   background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);touch-action:manipulation;
   -webkit-user-select:none;user-select:none}
 #map .tiles img{position:absolute;max-width:none;opacity:0;transition:opacity .3s;pointer-events:none}
 #map .tiles img.on{opacity:1}
+#map .tiles{filter:saturate(.55) brightness(1.03)}             /* mute OSM colours so markers stand out */
+@media (prefers-color-scheme:dark){#map .tiles{filter:invert(1) hue-rotate(180deg) saturate(.5) brightness(.85) contrast(.9)}}
 #map .range{position:absolute;border:2px dashed var(--muted);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none}
 #map .me{position:absolute;width:18px;height:18px;border-radius:50%;background:#1A73E8;border:3px solid #fff;
   box-shadow:0 0 0 6px rgba(26,115,232,.2),0 1px 3px rgba(0,0,0,.4);transform:translate(-50%,-50%);pointer-events:none}
@@ -151,7 +153,7 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     <div class="pins"></div>
     <p class="mapnote" aria-live="polite"></p>
     <div id="card" hidden></div>
-    <p class="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a></p>
+    <p class="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>
   </div>
 
   <ol id="list"></ol>
@@ -176,7 +178,6 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
   let radius = RADII.includes(+store.get("radius")) ? +store.get("radius") : 500;
   let layout = store.get("layout") === "list" ? "list" : "map";
   let selected = null;                                   // station_id whose card is open on the map
-  const dark = matchMedia("(prefers-color-scheme: dark)");
 
   let pos = null, info = null, statusUrl = null, electric = new Set();
   let stations = null, fetchedAt = 0, timer = null, watchId = null, hadEbike = null, busy = false;
@@ -291,18 +292,17 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
 
   // Street tiles are decoration: requested in the background, faded in on load, never awaited.
   function drawTiles(z, left, top, w, h){
-    const zt = Math.max(0, Math.min(20, Math.ceil(z))), size = TILE * 2 ** (z - zt);
-    const style = dark.matches ? "dark_all" : "light_all", hd = devicePixelRatio > 1 ? "@2x" : "";
+    const zt = Math.max(0, Math.min(19, Math.ceil(z))), size = TILE * 2 ** (z - zt);
     const layer = $("map").querySelector(".tiles"), keep = new Set();
     for (let x = Math.floor(left / size); x * size < left + w; x++)
       for (let y = Math.floor(top / size); y * size < top + h; y++) {
-        const key = `${style}/${zt}/${x}/${y}`;
+        const key = `${zt}/${x}/${y}`;
         keep.add(key);
         let img = tiles.get(key);
         if (!img) {
           img = el("img"); img.alt = ""; img.decoding = "async"; img.draggable = false;
           img.onload = () => img.classList.add("on");
-          img.src = `https://${"abcd"[(x + y) % 4]}.basemaps.cartocdn.com/${key}${hd}.png`;
+          img.src = `https://tile.openstreetmap.org/${key}.png`;
           tiles.set(key, img); layer.append(img);
         }
         const l = Math.round(x * size - left), t = Math.round(y * size - top);
@@ -362,7 +362,6 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
   $("card").onclick = ev => ev.stopPropagation();
   $("map").onclick = () => { if (selected) { selected = null; render(); } };
   new ResizeObserver(() => { if (layout === "map") render(); }).observe($("map"));
-  dark.addEventListener?.("change", render);
 
   function restartRing(){
     const ring = document.querySelector(".ring");

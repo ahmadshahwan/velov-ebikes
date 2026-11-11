@@ -18,8 +18,9 @@ Live at https://ahmad.shahwan.pw/velov-ebikes/ via GitHub Pages
   (battery hero + station rows). The map is hand-rolled, not a library: a
   Web Mercator view centred on the user, scaled so the selected radius fits
   (the radius buttons act as zoom). Station markers render immediately;
-  CARTO light/dark raster tiles load in the background and fade in, and
-  rendering never waits for them. Tapping a marker opens a detail card.
+  OpenStreetMap raster tiles (no API key; muted via CSS filter, inverted in
+  dark mode) load in the background and fade in, and rendering never waits
+  for them. Keep the OSM attribution visible. Tapping a marker opens a detail card.
 
 ## Conventions
 - Keep it one self-contained file, vanilla JS, minimal dependencies.
