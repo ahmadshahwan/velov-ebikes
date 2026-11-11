@@ -30,7 +30,9 @@ body{background:var(--bg);color:var(--ink);font:400 1rem/1.45 var(--body);-webki
 main{max-width:34rem;margin:0 auto;padding:1rem 1.1rem 2rem}
 
 header{display:flex;align-items:center;justify-content:space-between;gap:1rem;color:var(--muted);font-size:.9rem}
-.tick{display:flex;align-items:center;gap:.45rem}
+.tick{display:flex;align-items:center;gap:.45rem;font:inherit;color:inherit;background:none;
+  border:0;border-radius:999px;padding:.3rem .5rem;margin:-.3rem -.5rem;cursor:pointer}
+.tick:hover{color:var(--ink)}
 .ring{width:18px;height:18px;transform:rotate(-90deg)}
 .ring circle{fill:none;stroke-width:3}
 .ring .track{stroke:var(--line)}
@@ -84,10 +86,10 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
 <main>
   <header>
     <span id="place">Finding your location…</span>
-    <span class="tick" title="Next refresh">
+    <button type="button" class="tick" id="refresh" title="Refresh now" aria-label="Refresh bike counts now">
       <svg class="ring" viewBox="0 0 18 18" aria-hidden="true"><circle class="track" cx="9" cy="9" r="7"/><circle class="sweep" cx="9" cy="9" r="7"/></svg>
       <span id="age">–</span>
-    </span>
+    </button>
   </header>
 
   <section id="hero" aria-live="polite">
@@ -151,7 +153,7 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     try {
       if (!info) await discover();
       stations = (await data(statusUrl)).stations;
-      fetchedAt = Date.now();
+      fetchedAt = Date.now(); showAge();
       $("msg").textContent = "";
       render();
     } catch (e) {
@@ -219,9 +221,8 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     const ring = document.querySelector(".ring");
     ring.classList.remove("run"); void ring.getBoundingClientRect(); ring.classList.add("run");
   }
-  setInterval(() => {
-    if (fetchedAt) $("age").textContent = `${Math.round((Date.now() - fetchedAt) / 1000)} s ago`;
-  }, 1000);
+  const showAge = () => { if (fetchedAt) $("age").textContent = `${Math.round((Date.now() - fetchedAt) / 1000)} s ago`; };
+  setInterval(showAge, 1000);
 
   function locate(){
     if (!("geolocation" in navigator)) { $("place").textContent = "Location not supported"; return; }
@@ -243,6 +244,12 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     clearInterval(timer); timer = null;
     if (watchId != null) navigator.geolocation.clearWatch(watchId), watchId = null;
   }
+  // Manual refresh: fetch now and restart the countdown from zero.
+  $("refresh").onclick = () => {
+    if (!timer || busy) return;
+    clearInterval(timer); timer = setInterval(poll, POLL_MS);
+    poll();
+  };
   document.addEventListener("visibilitychange", () => document.hidden ? stop() : start());
 
   const group = document.querySelector(".radius");
