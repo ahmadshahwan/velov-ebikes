@@ -15,7 +15,9 @@ Live at https://ahmad.shahwan.pw/velov-ebikes/ via GitHub Pages
 - The feed allows cross-origin requests, so no proxy is needed
   (`?proxy=` exists as a fallback).
 - Two layouts, toggled and saved in localStorage: map (default) and list
-  (battery hero + station rows). The map is hand-rolled, not a library: a
+  (station rows by distance). Both share the same header and controls (no
+  layout shift on toggle); the nearest open station with an e-bike is
+  emphasised in each, and pulses + vibrates when one appears after none. The map is hand-rolled, not a library: a
   Web Mercator view centred on the user, scaled so the selected radius fits
   (the radius buttons act as zoom). Station markers render immediately;
   OpenStreetMap raster tiles (no API key; muted via CSS filter, inverted in

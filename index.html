@@ -41,26 +41,12 @@ header{display:flex;align-items:center;justify-content:space-between;gap:1rem;co
 @keyframes sweep{from{stroke-dashoffset:44}to{stroke-dashoffset:0}}
 @media (prefers-reduced-motion:reduce){.ring.run .sweep{animation:none;stroke-dashoffset:0}}
 
-/* The hero: the nearest charged bike, drawn as a battery */
-#hero{margin:1.4rem 0 1.6rem}
-.battery{position:relative;display:inline-flex;align-items:baseline;gap:.6rem;
-  background:var(--charge);color:var(--charge-ink);border-radius:14px;
-  padding:.1rem 1.1rem .25rem;margin-right:14px}
-.battery::after{content:"";position:absolute;right:-12px;top:30%;height:40%;width:8px;
-  background:var(--charge);border-radius:0 5px 5px 0}
-.battery.empty{background:transparent;color:var(--off);box-shadow:inset 0 0 0 3px var(--off)}
-.battery.empty::after{background:var(--off)}
-.big{font:700 6.5rem/1 var(--cond);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.unit{font:600 1.5rem/1 var(--cond)}
-#hero h1{font:600 2rem/1.1 var(--cond);margin:.8rem 0 .2rem}
-#hero p{margin:0;color:var(--muted)}
-#hero a{color:inherit}
-.flash .battery{animation:flash .9s ease-out 2}
-@keyframes flash{50%{transform:scale(1.06)}}
-@media (prefers-reduced-motion:reduce){.flash .battery{animation:none}}
+/* When an e-bike appears after none: the best row/marker pulses (and the phone buzzes). */
+.flash{animation:flash .9s ease-out 2}
+@keyframes flash{50%{scale:1.12}}
+@media (prefers-reduced-motion:reduce){.flash{animation:none}}
 
-.controls{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between;margin:0 0 1rem}
-[data-layout="map"] .controls{margin-top:1.2rem}
+.controls{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between;margin:1.2rem 0 1rem}
 .radius,.layout{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
 .radius span{color:var(--muted);font-size:.9rem;margin-right:.2rem}
 .controls button{font:500 .95rem var(--body);color:var(--ink);background:transparent;
@@ -74,12 +60,16 @@ li a{display:grid;grid-template-columns:3.6rem 1fr auto;gap:.9rem;align-items:ce
 .pill{font:700 1.6rem/1 var(--cond);text-align:center;padding:.3rem 0;border-radius:8px;
   background:var(--charge);color:var(--charge-ink);font-variant-numeric:tabular-nums}
 .pill.zero{background:transparent;color:var(--off);box-shadow:inset 0 0 0 2px var(--line)}
+li.best .pill{font-size:2rem;padding:.4rem 0;box-shadow:0 0 0 3px var(--ink)}
+li.best .name{font-size:1.1rem}
+.listnote{margin:0 0 .8rem;color:var(--muted)}
+.listnote:empty{display:none}
 .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sub,.side{color:var(--muted);font-size:.88rem}
 .side{text-align:right}
 li.closed{opacity:.5}
 
-[data-layout="map"] #hero,[data-layout="map"] #list,[data-layout="list"] #map{display:none}
+[data-layout="map"] #list,[data-layout="map"] .listnote,[data-layout="list"] #map{display:none}
 
 /* Map layout: hand-rolled Web Mercator view centred on the user, scaled to the radius.
    Markers draw immediately; OpenStreetMap tiles fade in underneath whenever they arrive. */
@@ -130,12 +120,6 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     </button>
   </header>
 
-  <section id="hero" aria-live="polite">
-    <span class="battery empty"><span class="big">–</span></span>
-    <h1>Looking for e-bikes</h1>
-    <p>Allow location so stations can be sorted by distance.</p>
-  </section>
-
   <div class="controls">
     <div class="radius" role="group" aria-label="Search radius">
       <span>Within</span>
@@ -156,6 +140,7 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     <p class="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>
   </div>
 
+  <p class="listnote" aria-live="polite"></p>
   <ol id="list"></ol>
   <p id="msg" role="alert"></p>
   <footer>Live data from Métropole de Lyon and JCDecaux (Licence Ouverte). Refreshes only while this page is open.</footer>
@@ -235,7 +220,7 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
   const detail = r => r.open ? `${metres(r.d)}, ${walk(r.d)}` : `${metres(r.d)}, station closed`;
 
   function render(){
-    let all = null, near = [], best = null;
+    let all = null, near = [], best = null, flashId = null;
     if (stations && info && pos) {
       all = stations.map(s => {
         const i = info.get(s.station_id);
@@ -248,33 +233,21 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
       }).filter(Boolean);
       near = all.filter(r => r.d <= radius).sort((a, b) => a.d - b.d);
       best = near.find(r => r.open && r.e > 0) || null;
-      if (hadEbike === false && best) {
-        const hero = $("hero");
-        hero.classList.remove("flash"); void hero.offsetWidth; hero.classList.add("flash");
-        navigator.vibrate?.([120, 80, 120]);
-      }
+      if (hadEbike === false && best) { flashId = best.id; navigator.vibrate?.([120, 80, 120]); }
       hadEbike = !!best;
     }
-    if (layout === "map") renderMap(all, best);
-    else if (all) renderList(near, best);
+    if (layout === "map") renderMap(all, best, flashId);
+    else renderList(all, near, best, flashId);
   }
 
-  function renderList(rows, best){
-    const hero = $("hero");
-    hero.replaceChildren();
-    const batt = el("span", best ? "battery" : "battery empty");
-    batt.append(el("span", "big", best ? best.e : 0), el("span", "unit", (best?.e ?? 0) === 1 ? "e-bike" : "e-bikes"));
-    hero.append(batt);
-    if (best) {
-      const h = el("h1"); const a = el("a", null, best.name); a.href = directions(best); h.append(a);
-      hero.append(h, el("p", null, `${metres(best.d)}, ${walk(best.d)}`));
-    } else {
-      hero.append(el("h1", null, `None within ${metres(radius)}`),
-        el("p", null, rows.length ? "Widen the radius, or keep this page open: it checks again shortly." : "No stations in range. Widen the radius."));
-    }
+  const status = (all, best, rows) => !pos ? "Waiting for your location…" : !all ? "Loading stations…"
+    : best ? "" : rows ? `No stations within ${metres(radius)}. Widen the radius.`
+    : `No e-bikes within ${metres(radius)}. Widen the radius, or keep this page open: it checks again shortly.`;
 
+  function renderList(all, rows, best, flashId){
+    document.querySelector(".listnote").textContent = status(all, best, all && !rows.length);
     $("list").replaceChildren(...rows.map(r => {
-      const li = el("li", r.open ? null : "closed"), a = el("a");
+      const li = el("li", [r.open ? "" : "closed", r === best ? "best" : "", r.id === flashId ? "flash" : ""].join(" ").trim() || null), a = el("a");
       a.href = directions(r); a.target = "_blank"; a.rel = "noopener";
       const mid = el("div");
       mid.append(el("div", "name", r.name), el("div", "sub", detail(r)));
@@ -311,11 +284,10 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     for (const [key, img] of tiles) if (!keep.has(key)) { img.remove(); tiles.delete(key); }
   }
 
-  function renderMap(all, best){
+  function renderMap(all, best, flashId){
     const box = $("map"), w = box.clientWidth, h = box.clientHeight;
     const pins = box.querySelector(".pins"), me = box.querySelector(".me"), range = box.querySelector(".range");
-    box.querySelector(".mapnote").textContent = !pos ? "Waiting for your location…"
-      : !all ? "Loading stations…" : best ? "" : `No e-bikes within ${metres(radius)}`;
+    box.querySelector(".mapnote").textContent = best || !all ? status(all, best) : `No e-bikes within ${metres(radius)}`;
     if (!pos || !w) return;
 
     const mpp = radius / Math.max(40, Math.min(w, h) / 2 - 28);           // metres per pixel: radius fits the view
@@ -333,7 +305,7 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
       .sort((a, b) => rank(a.r) - rank(b.r));
     const focused = pins.contains(document.activeElement) ? document.activeElement.dataset.id : null;
     pins.replaceChildren(...shown.map(({ r, x, y }) => {
-      const b = el("button", "pin" + (r === best ? " best" : "") + (r.e ? "" : " zero") + (r.open ? "" : " closed"), r.e);
+      const b = el("button", "pin" + (r === best ? " best" : "") + (r.e ? "" : " zero") + (r.open ? "" : " closed") + (r.id === flashId ? " flash" : ""), r.e);
       b.type = "button"; b.dataset.id = r.id;
       b.style.left = x + "px"; b.style.top = y + "px";
       b.setAttribute("aria-label", `${r.name}: ${r.e} e-bike${r.e === 1 ? "" : "s"}, ${detail(r)}`);
