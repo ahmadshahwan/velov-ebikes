@@ -14,6 +14,12 @@ Live at https://ahmad.shahwan.pw/velov-ebikes/ via GitHub Pages
   `vehicle_types_available` whose type isn't `propulsion_type: human`.
 - The feed allows cross-origin requests, so no proxy is needed
   (`?proxy=` exists as a fallback).
+- Two layouts, toggled and saved in localStorage: map (default) and list
+  (battery hero + station rows). The map is hand-rolled, not a library: a
+  Web Mercator view centred on the user, scaled so the selected radius fits
+  (the radius buttons act as zoom). Station markers render immediately;
+  CARTO light/dark raster tiles load in the background and fade in, and
+  rendering never waits for them. Tapping a marker opens a detail card.
 
 ## Conventions
 - Keep it one self-contained file, vanilla JS, minimal dependencies.

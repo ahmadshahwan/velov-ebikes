@@ -59,11 +59,13 @@ header{display:flex;align-items:center;justify-content:space-between;gap:1rem;co
 @keyframes flash{50%{transform:scale(1.06)}}
 @media (prefers-reduced-motion:reduce){.flash .battery{animation:none}}
 
-.radius{display:flex;gap:.4rem;margin:0 0 1rem;flex-wrap:wrap;align-items:center}
+.controls{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between;margin:0 0 1rem}
+[data-layout="map"] .controls{margin-top:1.2rem}
+.radius,.layout{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
 .radius span{color:var(--muted);font-size:.9rem;margin-right:.2rem}
-.radius button{font:500 .95rem var(--body);color:var(--ink);background:transparent;
+.controls button{font:500 .95rem var(--body);color:var(--ink);background:transparent;
   border:1.5px solid var(--line);border-radius:999px;padding:.3rem .8rem;cursor:pointer}
-.radius button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.controls button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 button:focus-visible,a:focus-visible{outline:3px solid var(--charge);outline-offset:2px}
 
 ol{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
@@ -77,13 +79,47 @@ li a{display:grid;grid-template-columns:3.6rem 1fr auto;gap:.9rem;align-items:ce
 .side{text-align:right}
 li.closed{opacity:.5}
 
+[data-layout="map"] #hero,[data-layout="map"] #list,[data-layout="list"] #map{display:none}
+
+/* Map layout: hand-rolled Web Mercator view centred on the user, scaled to the radius.
+   Markers draw immediately; street tiles fade in underneath whenever they arrive. */
+#map{position:relative;height:min(70svh,40rem);min-height:18rem;border-radius:14px;overflow:hidden;
+  background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);touch-action:manipulation;
+  -webkit-user-select:none;user-select:none}
+#map .tiles img{position:absolute;max-width:none;opacity:0;transition:opacity .3s;pointer-events:none}
+#map .tiles img.on{opacity:1}
+#map .range{position:absolute;border:2px dashed var(--muted);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none}
+#map .me{position:absolute;width:18px;height:18px;border-radius:50%;background:#1A73E8;border:3px solid #fff;
+  box-shadow:0 0 0 6px rgba(26,115,232,.2),0 1px 3px rgba(0,0,0,.4);transform:translate(-50%,-50%);pointer-events:none}
+.pin{position:absolute;transform:translate(-50%,-50%);min-width:30px;height:30px;padding:0 .35rem;border:0;border-radius:8px;
+  font:700 1.15rem/30px var(--cond);font-variant-numeric:tabular-nums;text-align:center;cursor:pointer;
+  background:var(--charge);color:var(--charge-ink);box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.pin.zero{background:var(--surface);color:var(--off);box-shadow:inset 0 0 0 2px var(--off),0 1px 3px rgba(0,0,0,.25)}
+.pin.closed{opacity:.5}
+.pin.best{min-width:42px;height:42px;line-height:42px;font-size:1.6rem;border-radius:10px;z-index:1;
+  box-shadow:0 0 0 3px var(--ink),0 2px 8px rgba(0,0,0,.45)}
+.pin[aria-pressed="true"]{z-index:2;outline:3px solid var(--ink);outline-offset:3px}
+.mapnote{position:absolute;top:.6rem;left:50%;transform:translateX(-50%);margin:0;white-space:nowrap;
+  background:var(--surface);color:var(--ink);padding:.3rem .8rem;border-radius:999px;font-size:.9rem;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.mapnote:empty{display:none}
+.attr{position:absolute;right:0;bottom:0;margin:0;padding:.05rem .35rem;font-size:.65rem;color:var(--muted);
+  background:var(--surface);opacity:.85;border-top-left-radius:6px}
+.attr a{color:inherit}
+#card{position:absolute;left:.6rem;right:.6rem;bottom:1.5rem;z-index:3;display:grid;grid-template-columns:3rem 1fr auto auto;
+  gap:.8rem;align-items:center;background:var(--surface);border-radius:12px;padding:.7rem .6rem .7rem .8rem;
+  box-shadow:0 4px 18px rgba(0,0,0,.3);-webkit-user-select:text;user-select:text}
+#card[hidden]{display:none}
+#card > div{min-width:0}
+#card .go{font-weight:600;color:var(--ink);white-space:nowrap}
+#card .close{font:400 1.5rem/1 var(--body);color:var(--muted);background:none;border:0;padding:.2rem .4rem;cursor:pointer}
+
 #msg{margin:1rem 0;color:var(--warn)}
 #msg:empty{display:none}
 footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
 </style>
 </head>
 <body>
-<main>
+<main data-layout="map">
   <header>
     <span id="place">Finding your location…</span>
     <button type="button" class="tick" id="refresh" title="Refresh now" aria-label="Refresh bike counts now">
@@ -98,8 +134,24 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     <p>Allow location so stations can be sorted by distance.</p>
   </section>
 
-  <div class="radius" role="group" aria-label="Search radius">
-    <span>Within</span>
+  <div class="controls">
+    <div class="radius" role="group" aria-label="Search radius">
+      <span>Within</span>
+    </div>
+    <div class="layout" role="group" aria-label="Layout">
+      <button type="button" data-layout="map">Map</button>
+      <button type="button" data-layout="list">List</button>
+    </div>
+  </div>
+
+  <div id="map">
+    <div class="tiles"></div>
+    <div class="range"></div>
+    <div class="me" hidden></div>
+    <div class="pins"></div>
+    <p class="mapnote" aria-live="polite"></p>
+    <div id="card" hidden></div>
+    <p class="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a></p>
   </div>
 
   <ol id="list"></ol>
@@ -122,6 +174,9 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     set(k, v){ try { localStorage.setItem(k, v); } catch {} }
   };
   let radius = RADII.includes(+store.get("radius")) ? +store.get("radius") : 500;
+  let layout = store.get("layout") === "list" ? "list" : "map";
+  let selected = null;                                   // station_id whose card is open on the map
+  const dark = matchMedia("(prefers-color-scheme: dark)");
 
   let pos = null, info = null, statusUrl = null, electric = new Set();
   let stations = null, fetchedAt = 0, timer = null, watchId = null, hadEbike = null, busy = false;
@@ -176,19 +231,34 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
   const directions = r => `https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lon}&travelmode=walking`;
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
 
-  function render(){
-    if (!stations || !info || !pos) return;
-    const rows = stations.map(s => {
-      const i = info.get(s.station_id);
-      if (!i) return null;
-      const e = ebikes(s);
-      return { name: nameOf(i), lat: i.lat, lon: i.lon, e,
-        classic: Math.max(0, (s.num_bikes_available ?? 0) - e),
-        open: s.is_renting !== false && s.is_renting !== 0,
-        d: dist(pos.lat, pos.lon, i.lat, i.lon) };
-    }).filter(r => r && r.d <= radius).sort((a, b) => a.d - b.d);
+  const detail = r => r.open ? `${metres(r.d)}, ${walk(r.d)}` : `${metres(r.d)}, station closed`;
 
-    const best = rows.find(r => r.open && r.e > 0);
+  function render(){
+    let all = null, near = [], best = null;
+    if (stations && info && pos) {
+      all = stations.map(s => {
+        const i = info.get(s.station_id);
+        if (!i) return null;
+        const e = ebikes(s);
+        return { id: s.station_id, name: nameOf(i), lat: i.lat, lon: i.lon, e,
+          classic: Math.max(0, (s.num_bikes_available ?? 0) - e),
+          open: s.is_renting !== false && s.is_renting !== 0,
+          d: dist(pos.lat, pos.lon, i.lat, i.lon) };
+      }).filter(Boolean);
+      near = all.filter(r => r.d <= radius).sort((a, b) => a.d - b.d);
+      best = near.find(r => r.open && r.e > 0) || null;
+      if (hadEbike === false && best) {
+        const hero = $("hero");
+        hero.classList.remove("flash"); void hero.offsetWidth; hero.classList.add("flash");
+        navigator.vibrate?.([120, 80, 120]);
+      }
+      hadEbike = !!best;
+    }
+    if (layout === "map") renderMap(all, best);
+    else if (all) renderList(near, best);
+  }
+
+  function renderList(rows, best){
     const hero = $("hero");
     hero.replaceChildren();
     const batt = el("span", best ? "battery" : "battery empty");
@@ -201,21 +271,98 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
       hero.append(el("h1", null, `None within ${metres(radius)}`),
         el("p", null, rows.length ? "Widen the radius, or keep this page open: it checks again shortly." : "No stations in range. Widen the radius."));
     }
-    if (hadEbike === false && best) {
-      hero.classList.remove("flash"); void hero.offsetWidth; hero.classList.add("flash");
-      navigator.vibrate?.([120, 80, 120]);
-    }
-    hadEbike = !!best;
 
     $("list").replaceChildren(...rows.map(r => {
       const li = el("li", r.open ? null : "closed"), a = el("a");
       a.href = directions(r); a.target = "_blank"; a.rel = "noopener";
       const mid = el("div");
-      mid.append(el("div", "name", r.name), el("div", "sub", r.open ? `${metres(r.d)}, ${walk(r.d)}` : `${metres(r.d)}, station closed`));
+      mid.append(el("div", "name", r.name), el("div", "sub", detail(r)));
       a.append(el("span", r.e ? "pill" : "pill zero", r.e), mid, el("span", "side", `${r.classic} classic`));
       li.append(a); return li;
     }));
   }
+
+  const TILE = 256, tiles = new Map();
+  // Web Mercator, in pixels at (fractional) zoom z.
+  function project(lat, lon, z){
+    const size = TILE * 2 ** z, sin = Math.sin(lat * Math.PI / 180);
+    return [(lon + 180) / 360 * size, (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * size];
+  }
+
+  // Street tiles are decoration: requested in the background, faded in on load, never awaited.
+  function drawTiles(z, left, top, w, h){
+    const zt = Math.max(0, Math.min(20, Math.ceil(z))), size = TILE * 2 ** (z - zt);
+    const style = dark.matches ? "dark_all" : "light_all", hd = devicePixelRatio > 1 ? "@2x" : "";
+    const layer = $("map").querySelector(".tiles"), keep = new Set();
+    for (let x = Math.floor(left / size); x * size < left + w; x++)
+      for (let y = Math.floor(top / size); y * size < top + h; y++) {
+        const key = `${style}/${zt}/${x}/${y}`;
+        keep.add(key);
+        let img = tiles.get(key);
+        if (!img) {
+          img = el("img"); img.alt = ""; img.decoding = "async"; img.draggable = false;
+          img.onload = () => img.classList.add("on");
+          img.src = `https://${"abcd"[(x + y) % 4]}.basemaps.cartocdn.com/${key}${hd}.png`;
+          tiles.set(key, img); layer.append(img);
+        }
+        const l = Math.round(x * size - left), t = Math.round(y * size - top);
+        img.style.cssText = `left:${l}px;top:${t}px;width:${Math.round((x + 1) * size - left) - l}px;height:${Math.round((y + 1) * size - top) - t}px`;
+      }
+    for (const [key, img] of tiles) if (!keep.has(key)) { img.remove(); tiles.delete(key); }
+  }
+
+  function renderMap(all, best){
+    const box = $("map"), w = box.clientWidth, h = box.clientHeight;
+    const pins = box.querySelector(".pins"), me = box.querySelector(".me"), range = box.querySelector(".range");
+    box.querySelector(".mapnote").textContent = !pos ? "Waiting for your location…"
+      : !all ? "Loading stations…" : best ? "" : `No e-bikes within ${metres(radius)}`;
+    if (!pos || !w) return;
+
+    const mpp = radius / Math.max(40, Math.min(w, h) / 2 - 28);           // metres per pixel: radius fits the view
+    const z = Math.min(20, Math.log2(156543.034 * Math.cos(pos.lat * Math.PI / 180) / mpp));
+    const [cx, cy] = project(pos.lat, pos.lon, z), left = cx - w / 2, top = cy - h / 2;
+    drawTiles(z, left, top, w, h);
+    me.hidden = false; me.style.left = w / 2 + "px"; me.style.top = h / 2 + "px";
+    const ring = 2 * radius / mpp;
+    range.style.cssText = `left:${w / 2}px;top:${h / 2}px;width:${ring}px;height:${ring}px`;
+    if (!all) return;
+
+    const rank = r => r === best ? 3 : r.open && r.e ? 2 : r.open ? 1 : 0; // later = drawn on top
+    const shown = all.map(r => { const [x, y] = project(r.lat, r.lon, z); return { r, x: x - left, y: y - top }; })
+      .filter(({ x, y }) => x > -24 && x < w + 24 && y > -24 && y < h + 24)
+      .sort((a, b) => rank(a.r) - rank(b.r));
+    const focused = pins.contains(document.activeElement) ? document.activeElement.dataset.id : null;
+    pins.replaceChildren(...shown.map(({ r, x, y }) => {
+      const b = el("button", "pin" + (r === best ? " best" : "") + (r.e ? "" : " zero") + (r.open ? "" : " closed"), r.e);
+      b.type = "button"; b.dataset.id = r.id;
+      b.style.left = x + "px"; b.style.top = y + "px";
+      b.setAttribute("aria-label", `${r.name}: ${r.e} e-bike${r.e === 1 ? "" : "s"}, ${detail(r)}`);
+      b.setAttribute("aria-pressed", r.id === selected);
+      b.onclick = ev => { ev.stopPropagation(); selected = selected === r.id ? null : r.id; render(); };
+      return b;
+    }));
+    if (focused) [...pins.children].find(b => b.dataset.id === focused)?.focus();
+    showCard(all.find(r => r.id === selected));
+  }
+
+  function showCard(r){
+    const card = $("card");
+    card.hidden = !r;
+    if (!r) return card.replaceChildren();
+    const mid = el("div");
+    mid.append(el("div", "name", r.name), el("div", "sub", `${detail(r)} · ${r.classic} classic`));
+    const go = el("a", "go", "Directions");
+    go.href = directions(r); go.target = "_blank"; go.rel = "noopener";
+    const x = el("button", "close", "×");
+    x.type = "button"; x.setAttribute("aria-label", "Close");
+    x.onclick = () => { selected = null; render(); };
+    card.replaceChildren(el("span", r.e ? "pill" : "pill zero", r.e), mid, go, x);
+  }
+
+  $("card").onclick = ev => ev.stopPropagation();
+  $("map").onclick = () => { if (selected) { selected = null; render(); } };
+  new ResizeObserver(() => { if (layout === "map") render(); }).observe($("map"));
+  dark.addEventListener?.("change", render);
 
   function restartRing(){
     const ring = document.querySelector(".ring");
@@ -263,6 +410,15 @@ footer{margin-top:2rem;color:var(--muted);font-size:.8rem}
     };
     group.append(b);
   }
+
+  const main = document.querySelector("main"), layoutButtons = document.querySelectorAll(".layout button");
+  function setLayout(l){
+    layout = l; main.dataset.layout = l; store.set("layout", l);
+    layoutButtons.forEach(b => b.setAttribute("aria-pressed", b.dataset.layout === l));
+    render();
+  }
+  layoutButtons.forEach(b => b.onclick = () => setLayout(b.dataset.layout));
+  setLayout(layout);
 
   if (!document.hidden) start();
 })();
